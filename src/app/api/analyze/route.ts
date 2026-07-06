@@ -47,9 +47,12 @@ ${body.rows}
 3) 공기 지연이 초래하는 비용 증가(간접비, 금융비용, 물가상승/에스컬레이션, 지체상금)
 4) SS/FF 등 중첩 관계와 Lag에 내재된 리스크
 
-중요: 모든 텍스트는 **한글(순수 한국어)**로만 작성하세요. 한자나 다른 언어를 절대 섞지 마세요.
+중요 규칙(반드시 지킬 것):
+1. 모든 텍스트는 **순수 한국어**만 사용. 한자·영어·일본어 절대 금지.
+2. **JSON만** 출력하고, 앞뒤에 설명·코드블록·공백·기호 등 어떤 텍스트도 절대 추가하지 마세요.
+3. JSON 끝나는 즉시 그만 작성하세요.
 
-반드시 아래 JSON 형식으로만 응답하세요. 마크다운 코드블록이나 다른 텍스트를 포함하지 마세요:
+아래 JSON 형식만 출력:
 {"summary":"전체 총평 2~3문장","risks":[{"category":"공정" 또는 "비용","severity":"높음"/"중간"/"낮음","title":"리스크 제목","description":"리스크 설명 1~2문장","mitigation":"해결방안 1~2문장","relatedIds":["관련 활동ID"]}]}
 risks는 중요도 순으로 최대 5개.`;
 
@@ -90,10 +93,15 @@ risks는 중요도 순으로 최대 5개.`;
       const text: string = data?.choices?.[0]?.message?.content ?? "";
 
       let parsed: unknown = null;
-      try {
-        parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      } catch {
-        /* 파싱 실패 → 원문 반환 */
+      const firstBrace = text.indexOf("{");
+      const lastBrace = text.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        const jsonStr = text.slice(firstBrace, lastBrace + 1);
+        try {
+          parsed = JSON.parse(jsonStr);
+        } catch {
+          /* 파싱 실패 → 원문 반환 */
+        }
       }
 
       if (parsed && typeof parsed === "object" && "risks" in parsed) {
