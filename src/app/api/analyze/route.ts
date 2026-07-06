@@ -14,10 +14,10 @@ interface AnalyzeBody {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "서버에 GEMINI_API_KEY가 설정되지 않았습니다. Vercel 환경변수를 확인하세요." },
+      { error: "서버에 GROQ_API_KEY가 설정되지 않았습니다. Vercel 환경변수를 확인하세요." },
       { status: 500 }
     );
   }
@@ -51,11 +51,8 @@ ${body.rows}
 {"summary":"전체 총평 2~3문장","risks":[{"category":"공정" 또는 "비용","severity":"높음"/"중간"/"낮음","title":"리스크 제목","description":"리스크 설명 1~2문장","mitigation":"해결방안 1~2문장","relatedIds":["관련 활동ID"]}]}
 risks는 중요도 순으로 최대 5개.`;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-  const requestBody = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 1500 },
-  });
+  const url = "https://api.groq.com/openai/v1/chat/completions";
+  const model = "llama-3.1-70b-versatile";
 
   let lastErr = "";
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -63,8 +60,15 @@ risks는 중요도 순으로 최대 5개.`;
     try {
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: requestBody,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 1500,
+        }),
       });
 
       if (res.status === 429) {
@@ -75,16 +79,13 @@ risks는 중요도 순으로 최대 5개.`;
       if (!res.ok) {
         const errText = await res.text();
         return NextResponse.json(
-          { error: `Gemini API 오류 (${res.status})`, detail: errText.slice(0, 500) },
+          { error: `Groq API 오류 (${res.status})`, detail: errText.slice(0, 500) },
           { status: 502 }
         );
       }
 
       const data = await res.json();
-      const text: string =
-        data?.candidates?.[0]?.content?.parts
-          ?.map((p: { text?: string }) => p.text ?? "")
-          .join("") ?? "";
+      const text: string = data?.choices?.[0]?.message?.content ?? "";
 
       let parsed: unknown = null;
       try {
@@ -103,7 +104,7 @@ risks는 중요도 순으로 최대 5개.`;
   }
   const msg =
     lastErr === "429"
-      ? "Gemini API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+      ? "Groq API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
       : "AI 분석 요청에 실패했습니다. 잠시 후 다시 시도하세요.";
   return NextResponse.json({ error: msg }, { status: 502 });
 }

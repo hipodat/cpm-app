@@ -12,13 +12,13 @@
 - **드래그**: 막대 이동(ES 스냅 / Lag 반영), 끝단 리사이즈, 막대 더블클릭으로 기간 직접 입력
 - **마우스 연결**: 커넥터 위치로 FS/SS/FF/SF 자동 결정, 순환 시 연결 차단, 연결선 클릭 수정·삭제
 - **엑셀 내보내기**: 시트1 일정입력, 시트2 간트차트
-- **AI 분석**: 서버 API 라우트에서 Google Gemini API 호출(키는 서버에만 보관). 공정 지연·비용 리스크와 대응방안 제안
+- **AI 분석**: 서버 API 라우트에서 Groq API(Llama 3.1 70B) 호출(키는 서버에만 보관). 공정 지연·비용 리스크와 대응방안 제안
 
 ## 로컬 실행
 
 ```bash
 npm install
-cp .env.example .env.local   # 그리고 .env.local 안의 GEMINI_API_KEY 값을 본인 키로 채우기
+cp .env.example .env.local   # 그리고 .env.local 안의 GROQ_API_KEY 값을 본인 키로 채우기
 npm run dev
 ```
 
@@ -35,15 +35,15 @@ http://localhost:3000 접속.
    ```
 2. https://vercel.com 에서 **Add New → Project → Import**로 해당 저장소를 선택합니다.
 3. **Environment Variables**에 아래 항목을 추가합니다.
-   - `GEMINI_API_KEY` = 본인 Google Gemini API 키 (https://aistudio.google.com/app/apikey 에서 발급)
+   - `GROQ_API_KEY` = 본인 Groq API 키 (https://console.groq.com/keys 에서 발급)
 4. **Deploy**를 누릅니다.
 
 > CLI로 배포하려면 폴더에서 `npx vercel` 실행 후 안내에 따라 로그인·설정하고,
-> `npx vercel env add GEMINI_API_KEY` 로 키를 등록한 뒤 `npx vercel --prod` 로 배포합니다.
+> `npx vercel env add GROQ_API_KEY` 로 키를 등록한 뒤 `npx vercel --prod` 로 배포합니다.
 
 ### API 키 관련 주의
 
-- 키는 서버 환경변수(`process.env.GEMINI_API_KEY`)로만 사용되며, `src/app/api/analyze/route.ts` 서버 라우트에서만 읽습니다. **브라우저에는 절대 노출되지 않습니다.**
+- 키는 서버 환경변수(`process.env.GROQ_API_KEY`)로만 사용되며, `src/app/api/analyze/route.ts` 서버 라우트에서만 읽습니다. **브라우저에는 절대 노출되지 않습니다.**
 - 키가 없으면 앱은 정상 동작하되 "AI 분석" 버튼만 오류 메시지를 표시합니다.
 
 ## 데이터 저장
@@ -67,5 +67,5 @@ src/
 
 ## 모델 표기
 
-AI 분석은 `gemini-2.0-flash` 모델을 사용합니다. 다른 모델로 바꾸려면
+AI 분석은 Groq의 `llama-3.1-70b-versatile` 모델을 사용합니다. 다른 모델로 바꾸려면
 `src/app/api/analyze/route.ts` 의 `model` 값을 수정하세요.
