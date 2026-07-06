@@ -67,5 +67,5 @@ src/
 
 ## 모델 표기
 
-AI 분석은 `gemini-1.5-pro` 모델을 사용합니다. 다른 모델로 바꾸려면
+AI 분석은 `gemini-2.0-flash` 모델을 사용합니다. 다른 모델로 바꾸려면
 `src/app/api/analyze/route.ts` 의 `model` 값을 수정하세요.

@@ -118,7 +118,7 @@ export default function Scheduler() {
   });
   const [ai, setAi] = useState<AiState>({ open: false, loading: false, result: null, error: null });
   const [durEdit, setDurEdit] = useState<DurEdit | null>(null);
-  const [guideOpen, setGuideOpen] = useState(true);
+  const [guideOpen, setGuideOpen] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const hlTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -499,26 +499,45 @@ export default function Scheduler() {
       };
       const header = ["ID", "활동명", "기간(월)", ...months.map(mLabel)];
       const aoa: (string | number)[][] = [
-        [`건설공정관리 간트차트 — 시작 ${project.startDate} / 완료 ${fmtISO(cpm.finishMs)} (범례: ██ 주공정, ▒▒ 일반, ◆ 마일스톤)`],
+        [`건설공정관리 간트차트 — 시작 ${project.startDate} / 완료 ${fmtISO(cpm.finishMs)}`],
         [],
         header,
       ];
       acts.forEach((a) => {
         const c = cpm.byId.get(a.id);
-        const cells = months.map((m) => {
-          if (!c || c.es == null || c.ef == null) return "";
+        const cells: (string | number)[] = [a.id, a.name, fmtDur(a.durationMonths)];
+        months.forEach((m) => {
+          if (!c || c.es == null || c.ef == null) { cells.push(""); return; }
           const mEnd = addDays(addCalMonths(m, 1), -1);
-          if (c.ef < m || c.es > mEnd) return "";
-          if ((a.durationMonths || 0) === 0) return "◆";
-          return c.critical ? "██" : "▒▒";
+          if (c.ef < m || c.es > mEnd) { cells.push(""); return; }
+          if ((a.durationMonths || 0) === 0) { cells.push("◆"); return; }
+          cells.push("");
         });
-        aoa.push([a.id, a.name, fmtDur(a.durationMonths), ...cells]);
+        aoa.push(cells);
       });
       const ws2 = XLSX.utils.aoa_to_sheet(aoa);
+      const C_CRIT = "C0392B", C_NORM = "3D6E96", C_MS = "E8A33D";
+      acts.forEach((a, ai) => {
+        const c = cpm.byId.get(a.id);
+        if (!c || c.es == null || c.ef == null) return;
+        const row = 3 + ai;
+        months.forEach((m, mi) => {
+          const mEnd = addDays(addCalMonths(m, 1), -1);
+          if (c.ef! < m || c.es! > mEnd) return;
+          const ref = XLSX.utils.encode_cell({ c: 3 + mi, r: row });
+          const cell = ws2[ref];
+          if (!cell) return;
+          if ((a.durationMonths || 0) === 0) {
+            cell.s = { fill: { patternType: "solid", fgColor: { rgb: C_MS } } };
+          } else {
+            cell.s = { fill: { patternType: "solid", fgColor: { rgb: c.critical ? C_CRIT : C_NORM } } };
+          }
+        });
+      });
       ws2["!cols"] = [{ wch: 7 }, { wch: 24 }, { wch: 8 }, ...months.map(() => ({ wch: 5 }))];
       XLSX.utils.book_append_sheet(wb, ws2, "간트차트");
 
-      XLSX.writeFile(wb, "건설공정관리.xlsx");
+      XLSX.writeFile(wb, "건설공정관리.xlsx", { cellStyles: true });
       showToast("엑셀 파일을 내보냈습니다 (일정입력 + 간트차트)");
     } catch {
       showToast("엑셀 내보내기에 실패했습니다", "error");
