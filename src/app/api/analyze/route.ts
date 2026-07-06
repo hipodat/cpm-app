@@ -52,7 +52,7 @@ ${body.rows}
 risks는 중요도 순으로 최대 5개.`;
 
   const url = "https://api.groq.com/openai/v1/chat/completions";
-  const model = "llama-3.1-70b-versatile";
+  const model = "llama-3.3-70b-versatile";
 
   let lastErr = "";
   for (let attempt = 0; attempt < 3; attempt++) {

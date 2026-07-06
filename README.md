@@ -67,5 +67,5 @@ src/
 
 ## 모델 표기
 
-AI 분석은 Groq의 `llama-3.1-70b-versatile` 모델을 사용합니다. 다른 모델로 바꾸려면
+AI 분석은 Groq의 `llama-3.3-70b-versatile` 모델을 사용합니다. 다른 모델로 바꾸려면
 `src/app/api/analyze/route.ts` 의 `model` 값을 수정하세요.
