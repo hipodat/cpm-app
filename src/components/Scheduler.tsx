@@ -26,6 +26,8 @@ import {
   DAY,
 } from "@/lib/cpm";
 import { loadProject, saveProject } from "@/lib/storage";
+import { buildExcelWorkbook } from "@/lib/excel";
+import { Risk, requestAiAnalysis } from "@/lib/ai";
 
 /* ---------------- 상수 ---------------- */
 const PX_PER_DAY = 1.9;
@@ -86,14 +88,6 @@ interface DurEdit {
   x: number;
   y: number;
   val: string;
-}
-interface Risk {
-  category: string;
-  severity: string;
-  title: string;
-  description: string;
-  mitigation: string;
-  relatedIds?: string[];
 }
 interface AiState {
   open: boolean;
@@ -463,80 +457,7 @@ export default function Scheduler() {
   /* --- 엑셀 내보내기 --- */
   const exportExcel = () => {
     try {
-      const wb = XLSX.utils.book_new();
-      const rows = acts.map((a, i) => {
-        const c = cpm.byId.get(a.id);
-        return {
-          No: i + 1,
-          WBS: a.wbs || "",
-          ID: a.id,
-          활동명: a.name,
-          담당부서: a.owner || "",
-          "선행(관계·Lag)": (a.predecessors || [])
-            .map((p) => `${p.activityId}(${p.relation}${p.lagMonths ? `,${p.lagMonths}` : ""})`)
-            .join(", "),
-          "기간(월)": fmtDur(a.durationMonths),
-          "가장빠른착수(ES)": c?.es != null ? fmtISO(c.es) : "",
-          "가장빠른완료(EF)": c?.ef != null ? fmtISO(c.ef) : "",
-          "가장늦은착수(LS)": c?.ls != null ? fmtISO(c.ls) : "",
-          "가장늦은완료(LF)": c?.lf != null ? fmtISO(c.lf) : "",
-          "총여유 TF(일)": c?.tf ?? "",
-          주공정: c?.critical ? "●" : "",
-          오류: c?.error || "",
-        };
-      });
-      const ws1 = XLSX.utils.json_to_sheet(rows);
-      ws1["!cols"] = [
-        { wch: 4 }, { wch: 8 }, { wch: 7 }, { wch: 24 }, { wch: 10 }, { wch: 28 },
-        { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 11 }, { wch: 6 }, { wch: 24 },
-      ];
-      XLSX.utils.book_append_sheet(wb, ws1, "일정입력");
-
-      const months = timeline.months;
-      const mLabel = (m: number) => {
-        const d = new Date(m);
-        return `${String(d.getUTCFullYear()).slice(2)}.${pad2(d.getUTCMonth() + 1)}`;
-      };
-      const header = ["ID", "활동명", "기간(월)", ...months.map(mLabel)];
-      const aoa: (string | number)[][] = [
-        [`건설공정관리 간트차트 — 시작 ${project.startDate} / 완료 ${fmtISO(cpm.finishMs)}`],
-        [],
-        header,
-      ];
-      acts.forEach((a) => {
-        const c = cpm.byId.get(a.id);
-        const cells: (string | number)[] = [a.id, a.name, fmtDur(a.durationMonths)];
-        months.forEach((m) => {
-          if (!c || c.es == null || c.ef == null) { cells.push(""); return; }
-          const mEnd = addDays(addCalMonths(m, 1), -1);
-          if (c.ef < m || c.es > mEnd) { cells.push(""); return; }
-          if ((a.durationMonths || 0) === 0) { cells.push("◆"); return; }
-          cells.push("");
-        });
-        aoa.push(cells);
-      });
-      const ws2 = XLSX.utils.aoa_to_sheet(aoa);
-      const C_CRIT = "C0392B", C_NORM = "3D6E96", C_MS = "E8A33D";
-      acts.forEach((a, ai) => {
-        const c = cpm.byId.get(a.id);
-        if (!c || c.es == null || c.ef == null) return;
-        const row = 3 + ai;
-        months.forEach((m, mi) => {
-          const mEnd = addDays(addCalMonths(m, 1), -1);
-          if (c.ef! < m || c.es! > mEnd) return;
-          const ref = XLSX.utils.encode_cell({ c: 3 + mi, r: row });
-          const cell = ws2[ref];
-          if (!cell) return;
-          if ((a.durationMonths || 0) === 0) {
-            cell.s = { fill: { patternType: "solid", fgColor: { rgb: C_MS } } };
-          } else {
-            cell.s = { fill: { patternType: "solid", fgColor: { rgb: c.critical ? C_CRIT : C_NORM } } };
-          }
-        });
-      });
-      ws2["!cols"] = [{ wch: 7 }, { wch: 24 }, { wch: 8 }, ...months.map(() => ({ wch: 5 }))];
-      XLSX.utils.book_append_sheet(wb, ws2, "간트차트");
-
+      const wb = buildExcelWorkbook(acts, cpm, timeline, project.startDate);
       XLSX.writeFile(wb, "건설공정관리.xlsx", { cellStyles: true });
       showToast("엑셀 파일을 내보냈습니다 (일정입력 + 간트차트)");
     } catch {
@@ -548,39 +469,15 @@ export default function Scheduler() {
   const runAI = async () => {
     setAi({ open: true, loading: true, result: null, error: null });
     try {
-      const rows = acts
-        .map((a) => {
-          const c = cpm.byId.get(a.id);
-          const preds =
-            (a.predecessors || [])
-              .map((p) => `${p.activityId}(${p.relation}${p.lagMonths ? `,lag ${p.lagMonths}개월` : ""})`)
-              .join(" / ") || "-";
-          return `${a.id} | ${a.name} | 공종:${a.wbs || "-"} | 담당부서:${a.owner || "-"} | 기간 ${a.durationMonths}개월 | 선행: ${preds} | ES ${fmtShort(c?.es)} ~ EF ${fmtShort(c?.ef)} | 총여유 ${c?.tf ?? "-"}일 | ${c?.critical ? "★주공정" : ""} ${c?.error ? `오류:${c.error}` : ""}`;
-        })
-        .join("\n");
-      const criticalPath = acts
-        .filter((a) => cpm.byId.get(a.id)?.critical)
-        .map((a) => a.id)
-        .join(" → ");
-
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          startDate: project.startDate,
-          finishDate: fmtISO(cpm.finishMs),
-          totalMonths,
-          activityCount: acts.length,
-          criticalCount: critCount,
-          criticalPath,
-          today: fmtISO(todayUTC()),
-          rows,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "분석 실패");
-      if (data.risks || data.summary) setAi({ open: true, loading: false, result: data, error: null });
-      else throw new Error("응답이 비어 있습니다");
+      const data = await requestAiAnalysis(
+        project.startDate,
+        fmtISO(cpm.finishMs),
+        totalMonths,
+        acts,
+        cpm,
+        critCount
+      );
+      setAi({ open: true, loading: false, result: data, error: null });
     } catch (e) {
       setAi({
         open: true,
